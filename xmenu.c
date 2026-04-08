@@ -206,6 +206,7 @@ struct Options {
 	char *name;
 	char *class;
 	char *title;
+	char *cliresources;
 
 	unsigned int button;
 	unsigned int modifier;
@@ -511,7 +512,9 @@ parseoptions(int argc, char *argv[])
 	/* options below are deprecated and ignored */
 	case 'i':
 	case 'r':
+		break;
 	case 'X':
+		options.cliresources = optarg;
 		break;
 	}
 	if (options.rootmode) {
@@ -700,6 +703,57 @@ error:
 	XFreeStringList(list);
 	XFree(tprop.value);
 	return s;
+}
+
+static char *
+readtextfile(const char *path)
+{
+	FILE *fp;
+	char *buf = NULL;
+	size_t len = 0, cap = 0;
+	char tmp[BUFSIZ];
+
+	if (path == NULL || *path == '\0')
+		return NULL;
+	fp = fopen(path, "r");
+	if (fp == NULL)
+		return NULL;
+	while (fgets(tmp, sizeof tmp, fp) != NULL) {
+		size_t n = strlen(tmp);
+		if (len + n + 1 > cap) {
+			size_t newcap = (cap == 0) ? 4096 : cap * 2;
+			while (len + n + 1 > newcap)
+				newcap *= 2;
+			buf = realloc(buf, newcap);
+			if (buf == NULL)
+				err(EXIT_FAILURE, "realloc");
+			cap = newcap;
+		}
+		memcpy(buf + len, tmp, n);
+		len += n;
+	}
+	if (buf != NULL)
+		buf[len] = '\0';
+	fclose(fp);
+	return buf;
+}
+
+static const char *
+getdefaultresourcespath(void)
+{
+	static const char *paths[] = {
+		"/usr/share/X11/app-defaults/XMenu",
+		"/usr/lib/X11/app-defaults/XMenu",
+		"/etc/X11/app-defaults/XMenu",
+		NULL,
+	};
+	size_t i;
+
+	for (i = 0; paths[i] != NULL; i++) {
+		if (access(paths[i], R_OK) == 0)
+			return paths[i];
+	}
+	return NULL;
 }
 
 static void
@@ -1059,8 +1113,29 @@ inittheme(Widget *widget)
 		&(XRenderColor){ .alpha = 0xFFFF },
 		true
 	);
+	char *filedb = NULL;
+	char *clidb = NULL;
+	char *envdb = NULL;
+	const char *defaultres;
+
 	resourcesdb = XResourceManagerString(widget->display);
 	loadresources(widget, resourcesdb);
+	defaultres = getdefaultresourcespath();
+	if (defaultres != NULL) {
+		filedb = readtextfile(defaultres);
+		loadresources(widget, filedb);
+	}
+	envdb = getenv("RESOURCES_DATA");
+	loadresources(widget, envdb);
+	if (options.cliresources != NULL) {
+		if (access(options.cliresources, R_OK) == 0)
+			clidb = readtextfile(options.cliresources);
+		else
+			clidb = estrdup(options.cliresources);
+		loadresources(widget, clidb);
+	}
+	free(filedb);
+	free(clidb);
 	if (widget->fontset == NULL)
 		setfont(widget, NULL, 0.0);
 	if (widget->fontset == NULL) {
@@ -1231,34 +1306,37 @@ getposition(Widget *widget, XRectangle *geometry)
 	widget->monitor.x = widget->monitor.y = 0;
 	widget->monitor.width = DisplayWidth(widget->display, widget->screen);
 	widget->monitor.height = DisplayHeight(widget->display, widget->screen);
-
 #ifndef NO_XINERAMA
-	XineramaScreenInfo *info = NULL;
-	int nmons;
-	info = XineramaQueryScreens(widget->display, &nmons);
-	if (info == NULL)
-		return;
-	if (options.use_monitor && options.monitor >= 0 && options.monitor < nmons) {
-		widget->monitor.x = info[options.monitor].x_org;
-		widget->monitor.y = info[options.monitor].y_org;
-		widget->monitor.width = info[options.monitor].width;
-		widget->monitor.height = info[options.monitor].height;
-	} else for (int i = 0; i < nmons; i++) {
-		if (x < info[i].x_org)
-			continue;
-		if (y < info[i].y_org)
-			continue;
-		if (x >= info[i].x_org + info[i].width)
-			continue;
-		if (y >= info[i].y_org + info[i].height)
-			continue;
-		widget->monitor.x = info[i].x_org;
-		widget->monitor.y = info[i].y_org;
-		widget->monitor.width = info[i].width;
-		widget->monitor.height = info[i].height;
-		break;
+	{
+		XineramaScreenInfo *info = NULL;
+		int nmons;
+		int i;
+
+		info = XineramaQueryScreens(widget->display, &nmons);
+		if (info == NULL)
+			return;
+		if (options.use_monitor && options.monitor >= 0 && options.monitor < nmons) {
+			widget->monitor.x = info[options.monitor].x_org;
+			widget->monitor.y = info[options.monitor].y_org;
+			widget->monitor.width = info[options.monitor].width;
+			widget->monitor.height = info[options.monitor].height;
+		} else for (i = 0; i < nmons; i++) {
+			if (x < info[i].x_org)
+				continue;
+			if (y < info[i].y_org)
+				continue;
+			if (x >= info[i].x_org + info[i].width)
+				continue;
+			if (y >= info[i].y_org + info[i].height)
+				continue;
+			widget->monitor.x = info[i].x_org;
+			widget->monitor.y = info[i].y_org;
+			widget->monitor.width = info[i].width;
+			widget->monitor.height = info[i].height;
+			break;
+		}
+		XFree(info);
 	}
-	XFree(info);
 #endif
 }
 

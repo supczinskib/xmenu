@@ -41,7 +41,9 @@ openxftfont(Display *display, const char *fontname, double fontsize)
 		goto error;
 	if (fontsize > 0.0)
 		(void)FcPatternAddDouble(pattern, FC_SIZE, fontsize);
-	FcDefaultSubstitute(pattern);
+	if (!FcConfigSubstitute(NULL, pattern, FcMatchPattern))
+		goto error;
+	XftDefaultSubstitute(display, DefaultScreen(display), pattern);
 	if ((match = FcFontMatch(NULL, pattern, &result)) == NULL)
 		goto error;
 	if ((font = XftFontOpenPattern(display, match)) == NULL)
@@ -234,7 +236,7 @@ opennewfont(CtrlFontSet *fontset, FcChar32 glyph)
 		goto done;
 	if (!FcConfigSubstitute(NULL, fcpattern, FcMatchPattern))
 		goto done;
-	FcDefaultSubstitute(fcpattern);
+	XftDefaultSubstitute(fontset->display, fontset->screen, fcpattern);
 	if ((match = XftFontMatch(fontset->display, fontset->screen, fcpattern, &result)) == NULL)
 		goto done;
 	if ((font = XftFontOpenPattern(fontset->display, match)) == NULL)
