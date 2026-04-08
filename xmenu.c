@@ -25,7 +25,9 @@
 #include <X11/XKBlib.h>
 #include <X11/cursorfont.h>
 #include <X11/Xft/Xft.h>
+#ifndef NO_XINERAMA
 #include <X11/extensions/Xinerama.h>
+#endif
 #include <Imlib2.h>
 
 #include "ctrlfnt.h"
@@ -1209,11 +1211,9 @@ cleanup(Widget *widget)
 static void
 getposition(Widget *widget, XRectangle *geometry)
 {
-	XineramaScreenInfo *info = NULL;
 	Window dw;          /* dummy variable */
 	int di;             /* dummy variable */
 	unsigned du;        /* dummy variable */
-	int nmons;
 	int x, y;
 
 	XQueryPointer(
@@ -1231,6 +1231,10 @@ getposition(Widget *widget, XRectangle *geometry)
 	widget->monitor.x = widget->monitor.y = 0;
 	widget->monitor.width = DisplayWidth(widget->display, widget->screen);
 	widget->monitor.height = DisplayHeight(widget->display, widget->screen);
+
+#ifndef NO_XINERAMA
+	XineramaScreenInfo *info = NULL;
+	int nmons;
 	info = XineramaQueryScreens(widget->display, &nmons);
 	if (info == NULL)
 		return;
@@ -1255,6 +1259,7 @@ getposition(Widget *widget, XRectangle *geometry)
 		break;
 	}
 	XFree(info);
+#endif
 }
 
 static int

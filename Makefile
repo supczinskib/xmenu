@@ -6,14 +6,36 @@ DOC = README.md
 
 PREFIX ?= /usr/local
 MANPREFIX ?= ${PREFIX}/share/man
-LOCALINC = /usr/local/include
-LOCALLIB = /usr/local/lib
-X11INC = /usr/X11R6/include
-X11LIB = /usr/X11R6/lib
+
+#
+# Cross-compile friendliness:
+# - If STAGING_SYSROOT is set, prefer headers/libs from that sysroot.
+# - Allow disabling Xinerama (multi-monitor support) when headers/libs
+#   are not available (NO_XINERAMA=1).
+#
+STAGING_SYSROOT ?=
+
+ifeq ($(strip $(STAGING_SYSROOT)),)
+X11INC ?= /usr/include
+X11LIB ?= /usr/lib
+FTINC  ?= /usr/include/freetype2
+else
+X11INC ?= $(STAGING_SYSROOT)/usr/include
+X11LIB ?= $(STAGING_SYSROOT)/usr/lib
+FTINC  ?= $(STAGING_SYSROOT)/usr/include/freetype2
+endif
+
+NO_XINERAMA ?= 0
 
 DEFS = -D_POSIX_C_SOURCE=200809L -DGNU_SOURCE -D_BSD_SOURCE
-INCS = -I${LOCALINC} -I${X11INC} -I/usr/include/freetype2 -I${X11INC}/freetype2
-LIBS = -L${LOCALLIB} -L${X11LIB} -lfontconfig -lXft -lX11 -lXinerama -lXrender -lImlib2
+INCS = -I${X11INC} -I${FTINC}
+LIBS = -L${X11LIB} -lfontconfig -lXft -lX11 -lXrender -lImlib2
+
+ifneq ($(strip $(NO_XINERAMA)),0)
+DEFS += -DNO_XINERAMA
+else
+LIBS += -lXinerama
+endif
 
 bindir = ${DESTDIR}${PREFIX}/bin
 mandir = ${DESTDIR}${MANPREFIX}/man1
