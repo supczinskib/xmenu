@@ -76,6 +76,7 @@
 	X(GAP_WID,      "Gap",                  "gap"                   ) \
 	X(ICON_SIZE,    "IconSize",             "iconSize"              ) \
 	X(MAX_ITEMS,    "MaxItems",             "maxItems"              ) \
+	X(FIRST_BG,     "FirstItemBackground",  "firstItemBackground"   ) \
 	X(NORMAL_BG,    "Background",           "background"            ) \
 	X(NORMAL_FG,    "Foreground",           "foreground"            ) \
 	X(OPACITY,      "Opacity",              "opacity"               ) \
@@ -252,7 +253,8 @@ typedef struct Widget {
 		XRenderColor chans;
 		Pixmap pix;
 		Picture pict;
-	} opacity, border, colors[SCHEME_LAST][COLOR_LAST];
+	} opacity, border, firstitembg, colors[SCHEME_LAST][COLOR_LAST];
+	bool hasfirstitembg;
 
 
 	struct ResourcePair {
@@ -776,6 +778,17 @@ loadresources(Widget *widget, const char *str)
 		if (value == NULL)
 			continue;
 		switch (resource) {
+		case FIRST_BG:
+			if (value != NULL) {
+				setcolor(
+					widget,
+					widget->firstitembg.pict,
+					&widget->firstitembg.chans,
+					value
+				);
+				widget->hasfirstitembg = true;
+			}
+			break;
 		case NORMAL_BG:
 		case SHADOW_MID:
 			setcolor(
@@ -1081,6 +1094,7 @@ inittheme(Widget *widget)
 	widget->colors[SCHEME_SHADOW][COLOR_TOP].chans = DEF_COLOR_SHDTOP;
 	widget->colors[SCHEME_SHADOW][COLOR_BOT].chans = DEF_COLOR_SHDBOT;
 	widget->border.chans = DEF_COLOR_BRD;
+	widget->hasfirstitembg = false;
 	widget->borderwid = DEF_BORDER;
 	widget->iconsize = DEF_ICONSIZE;
 	widget->gap = DEF_GAP;
@@ -1104,6 +1118,13 @@ inittheme(Widget *widget)
 		&widget->border.pict,
 		&widget->border.pix,
 		&widget->border.chans,
+		false
+	);
+	createpicture(
+		widget,
+		&widget->firstitembg.pict,
+		&widget->firstitembg.pix,
+		&(XRenderColor){ 0 },
 		false
 	);
 	createpicture(
@@ -1265,6 +1286,18 @@ cleanup(Widget *widget)
 		XRenderFreePicture(
 			widget->display,
 			widget->opacity.pict
+		);
+	}
+	if (widget->firstitembg.pict != None) {
+		XRenderFreePicture(
+			widget->display,
+			widget->firstitembg.pict
+		);
+	}
+	if (widget->firstitembg.pix != None) {
+		XFreePixmap(
+			widget->display,
+			widget->firstitembg.pix
 		);
 	}
 	if (widget->opacity.pix != None) {
@@ -1799,6 +1832,7 @@ drawmenu(Widget *widget, Menu *menu)
 		rect.x += widget->iconsize + PADDING;
 	rect.y = firstitempos(widget, menu);
 	rect.width = menu->geometry.width;
+	bool drewfirstitembg = false;
 	for (item = menu->first; item != NULL; item = item->next) {
 		if (item->label == NULL) {
 			rect.height = widget->separatorh;
@@ -1815,6 +1849,21 @@ drawmenu(Widget *widget, Menu *menu)
 			goto next;
 		}
 		rect.height = widget->itemh;
+		if (!drewfirstitembg && widget->hasfirstitembg) {
+			XRenderComposite(
+				widget->display,
+				PictOpSrc,
+				widget->firstitembg.pict,
+				widget->opacity.pict,
+				canvas[CANVAS_NORMAL][LAYER_BG].picture,
+				0, 0,
+				0, 0,
+				widget->shadowwid, rect.y,
+				menu->geometry.width - widget->shadowwid * 2,
+				rect.height
+			);
+			drewfirstitembg = true;
+		}
 		image = loadicon(
 			widget,
 			item->file,
