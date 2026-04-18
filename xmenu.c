@@ -189,7 +189,14 @@ typedef struct Menu {
 	bool hasicon;
 	bool hassubmenu;
 	bool directory;
+	bool isroot;
 } Menu;
+
+enum FirstItemMode {
+	FIRSTITEM_ALL,
+	FIRSTITEM_NONE,
+	FIRSTITEM_ROOTONLY,
+};
 
 struct Options {
 	Item *items;
@@ -201,6 +208,7 @@ struct Options {
 	bool filebrowse;
 	bool freetitle;
 	bool use_monitor;
+	enum FirstItemMode firstitemmode;
 	int monitor;
 	int argc;
 	char **argv;
@@ -274,7 +282,7 @@ usage(void)
 {
 	(void)fprintf(
 		stderr,
-		"usage: xmenu [-fw] [-N name] "
+		"usage: xmenu [-fuwU] [-N name] "
 		"[-p position] [-t window] [-x button]\n"
 	);
 	exit(EXIT_FAILURE);
@@ -486,7 +494,7 @@ parseoptions(int argc, char *argv[])
 	} else {
 		options.name = NAME;
 	}
-	while ((ch = getopt(argc, argv, "ifN:p:rt:wx:X:")) != -1) switch (ch) {
+	while ((ch = getopt(argc, argv, "ifN:p:rt:uwUx:X:")) != -1) switch (ch) {
 	case 'N':
 		options.name = optarg;
 		break;
@@ -498,6 +506,12 @@ parseoptions(int argc, char *argv[])
 		break;
 	case 't':
 		options.client = strtoul(optarg, NULL, 0);
+		break;
+	case 'u':
+		options.firstitemmode = FIRSTITEM_NONE;
+		break;
+	case 'U':
+		options.firstitemmode = FIRSTITEM_ROOTONLY;
 		break;
 	case 'w':
 		options.windowed = true;
@@ -1849,7 +1863,9 @@ drawmenu(Widget *widget, Menu *menu)
 			goto next;
 		}
 		rect.height = widget->itemh;
-		if (!drewfirstitembg && widget->hasfirstitembg) {
+		if (!drewfirstitembg && widget->hasfirstitembg
+		    && options.firstitemmode != FIRSTITEM_NONE
+		    && (options.firstitemmode != FIRSTITEM_ROOTONLY || menu->isroot)) {
 			XRenderComposite(
 				widget->display,
 				PictOpSrc,
@@ -2251,6 +2267,7 @@ popupmenu(Widget *widget, Item *items, XRectangle *basis, bool isroot)
 		.title = name,
 		.last = NULL,
 		.selected = NULL,
+		.isroot = isroot,
 	};
 	menu->next = widget->menus;
 	menuh = widget->shadowwid * 2;
